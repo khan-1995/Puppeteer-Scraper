@@ -1,14 +1,13 @@
 const puppeteer = require('puppeteer');
 var write2File = require('../routes/testWrte').write2file;
-var mediaCode = "CCyu_trgOiJ";//req.body.mediaCode;
 var commentsAccumulator = [];
 var csJson = new Object();
 csJson["account_infotimelines"] = [];
 csJson["account_comments"] = [];
 var totalComments;
 var ownerInfo;
-var loadMore = async function (page) {
-    var isClickableLink = false;
+
+var loadMore = async function (page,maxComments) {
     var loadMoreButton = await page.$('.glyphsSpriteCircle_add__outline__24__grey_9');
     if (loadMoreButton != null) {
         await page.waitFor(1000);
@@ -17,10 +16,10 @@ var loadMore = async function (page) {
         await page.waitFor(1000);
         isClickableLink = true;
         console.log("%c current count of comments agrregated :: " + commentsAccumulator.length, "color:green");
-        if (commentsAccumulator.length > 700) {
+        if (commentsAccumulator.length > maxComments) {
             return false;
         }
-        await loadMore(page);
+        await loadMore(page,maxComments);
     } else {
         return false;
     }
@@ -41,7 +40,7 @@ async function closeBrowser(browser) {
     browser.close();
 }
 
-async function commentScrapperEngine(shortCode, browser, context) {
+async function commentScrapperEngine(shortCode, browser, context,maxComments) {
 
     //const browser = await startBrowser()
     const page = await context.newPage();
@@ -127,27 +126,28 @@ async function commentScrapperEngine(shortCode, browser, context) {
     });
 
     if (totalComments > commentsAccumulator.length) {
-        await loadMore(page);
+        await loadMore(page,maxComments);
     }
 
     
 
-    page.waitFor(1000 * 30);
-    //page.close();
-    csJson.account_comments.push(commentsAccumulator);
-    write2File(csJson);
-    browser.close();
+    page.waitFor(1000);
+    page.close();
+    //csJson.account_comments.push(commentsAccumulator);
+    //write2File(csJson);
+    //browser.close();
     return commentsAccumulator;
 }
 
+async function getCommentsByPost(browser,context,mediaShortCode,maxComments) {
+    if(browser===undefined && context===undefined){
+        var browser = await startBrowser();
+        const context = await browser.createIncognitoBrowserContext();
+    }
 
-async function init() {
-    var browser = await startBrowser();
-    const context = await browser.createIncognitoBrowserContext();
-    await commentScrapperEngine("CEmx4uTg_JM", browser, context);//     
-    // await closeBrowser(browser);
-    /*['net_ad','3meed_news','uae_barq','uaeelection','admediaoffice', 'Liwa_news','yasiuae', 'news_and_science11','emiratesyouth','arabyouthcenter','saeedalnazari','shamma','dha_dubai','lovindubai','wamnews',
-'dubaimediaoffice'];  */
+   return await commentScrapperEngine(mediaShortCode, browser, context,maxComments);//
 }
 
-init();
+//getCommentsByPost();
+
+exports.getCommentsByPost = getCommentsByPost;

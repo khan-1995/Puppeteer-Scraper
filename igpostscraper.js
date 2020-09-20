@@ -1,13 +1,13 @@
 const puppeteer = require('puppeteer');
-const { initParams } = require('request');
 var write2File = require('../routes/testWrte').write2file;
-var mediaCode = "CCyu_trgOiJ";//req.body.mediaCode;
+var getCommentsByPost = require('../scrapers/commentscraper').getCommentsByPost;
 var csJson = new Object();
 var postsAccumulator = [];
 csJson["account_infotimelines"] = [];
 csJson["account_comments"] = [];
 var totalComments;
 var ownerInfo;
+
 
 async function startBrowser() {
     const browser = await puppeteer.launch({
@@ -38,37 +38,10 @@ async function loadmore(page) {
     }
 }
 
-function responseCB(response) {
-    const graphUrl = response.url();
-    if (graphUrl.startsWith('https://www.instagram.com/graphql/query')) {
-        console.log(graphUrl);
-        response.json().then(doc => {
-            payloadPostsAggregator = doc.data.user.edge_owner_to_timeline_media.edges;
-            payloadPostsAggregator = payloadPostsAggregator.map(el => {
-                var igAccount = new Object();
-                igAccount.postId = el.node.id;
-                igAccount.ownerId = el.node.owner.id;
-                igAccount.authorUsername = el.node.owner.username;
-                igAccount.postText = el.node.edge_media_to_caption.edges[0];
-                igAccount.createdAt = el.node.taken_at_timestamp;
-                igAccount.mediaShortCode = el.node.shortCode;
-                igAccount.isVideo = el.node.is_video;
-                igAccount.likes = el.node.edge_media_preview_like.count;
-                igAccount.postURL = el.node.display_url;
-                igAccount.comments = el.node.edge_media_to_comment.count;
-                return igAccount;
-            });
-            postsAccumulator.push(...payloadPostsAggregator);
-            payloadPostsAggregator = [];
-        })
-            .catch(err => {
-                console.log("err ::==> " + err);
-            })
-    }
-}
-
 async function postScrapingEngine(account, browser, context) {
 
+    var userAccount = new Object();
+    var timelineMedia = [];
     const page = await context.newPage();
     try {
         await page.goto(`https://www.instagram.com/${account}`, { "waitUntil": "networkidle0" });
@@ -77,15 +50,43 @@ async function postScrapingEngine(account, browser, context) {
         console.log("error while loading page" + error);
     }
 
-    const recentPosts = await page.evaluate(() => {
-        return window._sharedData.entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges;
-    }
-    );
+    let userInfo = await page.evaluate(() => {
+        return window._sharedData.entry_data.ProfilePage[0].graphql.user;
+    });
 
+
+    userAccount["bio"] = userInfo.biography;
+    userAccount["followersCount"] = userInfo.edge_followed_by.count;
+    userAccount["followingCount"] = userInfo.edge_follow.count;
+    userAccount["fullName"] = userInfo.full_name;
+    userAccount["userId"] = userInfo.id;
+    userAccount["isVerified"] = userInfo.is_verified;
+    userAccount["isPrivate"] = userInfo.is_private;
+    userAccount["profilePic"] = userInfo.profile_pic_url;
+    userAccount["username"] = userInfo.username;
+    userAccount["postsMadeSoFar"] = userInfo.edge_owner_to_timeline_media.count;
+
+
+    var userTimelineFromWindowObj = userInfo.edge_owner_to_timeline_media.edges.map(el => {
+        let nodeObj = el.node;
+        var igAccount = new Object();
+        igAccount.postId = nodeObj.id;
+        igAccount.ownerId = nodeObj.owner.id;
+        igAccount.authorUsername = nodeObj.owner.username;
+        if (nodeObj.edge_media_to_caption !== undefined && nodeObj.edge_media_to_caption.edges.length > 0) {
+            igAccount.postText = nodeObj.edge_media_to_caption.edges[0].node.text;
+        }
+        igAccount.createdAt = nodeObj.taken_at_timestamp;
+        igAccount.mediaShortCode = nodeObj.shortcode;
+        igAccount.isVideo = nodeObj.is_video;
+        igAccount.likes = nodeObj.edge_media_preview_like.count;
+        igAccount.postURL = nodeObj.display_url;
+        igAccount.comments = nodeObj.edge_media_to_comment.count;
+        return igAccount;
+    });
+    
+    timelineMedia.push(...userTimelineFromWindowObj);
     var payloadPostsAggregator = [];
-    //console.log(recentPosts.length);
-    //recentPosts.map(el=>{console.log(el.node.shortcode)});
-    postsAccumulator.push(...recentPosts);
     page.setRequestInterception(true);
 
     page.on('request', req => {
@@ -102,51 +103,55 @@ async function postScrapingEngine(account, browser, context) {
         }
     });
 
-    //  page.on('response',responseCB);
-
-
-
     console.log("going to click on show more posts....");
-
     await loadmore(page);
 
     const response = await page.waitForResponse(response => response.url().startsWith("https://www.instagram.com/graphql/query") && response.status() === 200);
 
-    const arr = await response.json().then(doc => {
+    await response.json().then(doc => {
         payloadPostsAggregator = doc.data.user.edge_owner_to_timeline_media.edges;
         payloadPostsAggregator = payloadPostsAggregator.map(el => {
             var igAccount = new Object();
-            igAccount.postId = el.node.id;
-            igAccount.ownerId = el.node.owner.id;
-            igAccount.authorUsername = el.node.owner.username;
-            igAccount.postText = el.node.edge_media_to_caption.edges[0];
-            igAccount.createdAt = el.node.taken_at_timestamp;
-            igAccount.mediaShortCode = el.node.shortCode;
-            igAccount.isVideo = el.node.is_video;
-            igAccount.likes = el.node.edge_media_preview_like.count;
-            igAccount.postURL = el.node.display_url;
-            igAccount.comments = el.node.edge_media_to_comment.count;
+            let nodeObj = el.node;
+            igAccount.postId = nodeObj.id;
+            igAccount.ownerId = nodeObj.owner.id;
+            igAccount.authorUsername = nodeObj.owner.username;
+            if (nodeObj.edge_media_to_caption !== undefined && nodeObj.edge_media_to_caption.edges.length > 0) {
+                igAccount.postText = nodeObj.edge_media_to_caption.edges[0].node.text;
+            }
+            igAccount.createdAt = nodeObj.taken_at_timestamp;
+            igAccount.mediaShortCode = nodeObj.shortcode;
+            igAccount.isVideo = nodeObj.is_video;
+            igAccount.likes = nodeObj.edge_media_preview_like.count;
+            igAccount.postURL = nodeObj.display_url;
+            igAccount.comments = nodeObj.edge_media_to_comment.count;
             return igAccount;
         });
-        postsAccumulator.push(...payloadPostsAggregator);
+        timelineMedia.push(...payloadPostsAggregator);
         payloadPostsAggregator = [];
-        return payloadPostsAggregator;
     })
         .catch(err => {
             console.log("err ::==> " + err);
-        })
+        });
 
-
-
-    console.log(postsAccumulator.length);
-    return postsAccumulator;
+    console.log(`Total Posts Accumulated For ${account} is ${timelineMedia.length} `);
+    csJson.account_infotimelines.push({ "userAccount": userAccount, "timelineMedia": timelineMedia });
+    page.waitFor(500);
+    let comments = await getCommentsByPost(browser,context,"CFWxFC-AsCw",300);
+    csJson.account_comments.push(comments);
+    write2File(csJson);
+    page.close();
+    return timelineMedia;
 }
 
 async function init() {
     var browser = await startBrowser();
     const context = await browser.createIncognitoBrowserContext();
-    await postScrapingEngine("net_ad", browser, context);
 
+    const instaPage = await context.newPage();
+    await instaPage.goto(`https://www.instagram.com/`, { "waitUntil": "networkidle0" });
+
+    await postScrapingEngine("net_ad", browser, context);
 }
 
 init();
