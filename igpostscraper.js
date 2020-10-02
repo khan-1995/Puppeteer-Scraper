@@ -1,7 +1,7 @@
 const { resolve } = require('path');
 const puppeteer = require('puppeteer');
-var write2File = require('../routes/fileops').write2file;
-var getCommentsByPost = require('../scrapers/commentscraper').getCommentsByPost;
+var write2File = require('./fileops').write2file;
+var getCommentsByPost = require('./commentscraper').getCommentsByPost;
 var csJson = new Object();
 var accountsToProcessPerIteration = 10;
 csJson["account_infotimelines"] = [];
@@ -9,7 +9,7 @@ csJson["account_comments"] = [];
 
 async function sleep(time) {
 
-    return new Promise((resolve)=>setTimeout(resolve,time));
+    return new Promise((resolve) => setTimeout(resolve, time));
 }
 
 async function startBrowser() {
@@ -22,10 +22,6 @@ async function startBrowser() {
     return browser;
 }
 
-async function closeBrowser(browser) {
-    console.log("browser closed");
-    browser.close();
-}
 
 async function loadmore(page) {
 
@@ -52,8 +48,11 @@ async function postScrapingEngine(account, browser, context) {
 
         var userInfo = await page.evaluate(() => {
 
-            if (window._sharedData !== undefined && window._sharedData.entry_data !== undefined && window._sharedData.entry_data.ProfilePage.length > 0) {
-                return window._sharedData.entry_data.ProfilePage[0].graphql.user;
+            if (window._sharedData !== undefined && window._sharedData.entry_data !== undefined && window._sharedData.entry_data.ProfilePage !== undefined) {
+                if (window._sharedData.entry_data.ProfilePage.length > 0) {
+                    return window._sharedData.entry_data.ProfilePage[0].graphql.user;
+                }
+
             }
             return undefined;
 
@@ -172,8 +171,11 @@ async function postScrapingEngine(account, browser, context) {
                 return el.shortCode;
             });
 
-            let totalComments = await getCommentsByPost(browser, context, shortCodes, 300,[]);
-            csJson.account_comments.push(...totalComments);
+            if (commentsEnabled.includes(account)) {
+                let totalComments = await getCommentsByPost(browser, context, shortCodes, 300, []);
+                csJson.account_comments.push(...totalComments);
+            }
+
             await page.close();
         } else {
             await page.close();
@@ -198,10 +200,11 @@ async function processAllAccounts(fewAccounts, browser, context) {
 
 async function init() {
     let accountsToProcess = [...accountsList];
-    let nextIndex = indexToProcess + accountsToProcessPerIteration;
+
     if (indexToProcess >= accountsToProcess.length) {
         indexToProcess = 0;
     }
+    let nextIndex = indexToProcess + accountsToProcessPerIteration;
 
     if (nextIndex >= accountsToProcess.length) {
         nextIndex = accountsToProcess.length;
@@ -229,6 +232,8 @@ async function init() {
 }
 
 let indexToProcess = 0;
+
 var accountsList = ['sachintendulkar'];
+var commentsEnabled = ['sachintendulkar'];
 
 init();

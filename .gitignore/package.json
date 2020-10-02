@@ -1,0 +1,19 @@
+{
+  "name": "puppeteer-scraper",
+  "version": "1.0.0",
+  "description": "An Automated Scraper Using Puppeteer",
+  "main": "commentscraper.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khan-1995/Puppeteer-Scraper.git"
+  },
+  "author": "khaleel",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/khan-1995/Puppeteer-Scraper/issues"
+  },
+  "homepage": "https://github.com/khan-1995/Puppeteer-Scraper#readme"
+}

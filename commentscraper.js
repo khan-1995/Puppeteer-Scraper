@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-var write2File = require('../routes/fileops').write2file;
+var write2File = require('./fileops').write2file;
 var commentsAccumulator = [];
 var csJson = new Object();
 csJson["account_infotimelines"] = [];
@@ -41,18 +41,19 @@ var loadMore = async function (page, maxComments,docHandle) {
 
     async function commentScrapperEngine(shortCode, browser, context, maxComments) {
 
-        const page = await context.newPage();
-        try {
-            await page.goto(`https://www.instagram.com/p/${shortCode}/`, { "waitUntil": "networkidle2", "timeout": 0 });
-        } catch (error) {
-            page.close();
-            console.log("error while loading page" + error);
-        }
+    const page = await context.newPage();
 
-        const commentObject = await page.evaluate(() => {
+    await page.goto(`https://www.instagram.com/p/${shortCode}/`, { "waitUntil": "networkidle2", "timeout": 0 });
+
+    const commentObject = await page.evaluate(() => {
+        if (window._sharedData !== undefined && window._sharedData.entry_data !== undefined && window._sharedData.entry_data.PostPage!==undefined) {
             return window._sharedData.entry_data.PostPage[0].graphql.shortcode_media;
         }
-        );
+        return undefined;
+    }
+    );
+
+    if (commentObject !== undefined) {
         let totalComments = commentObject.edge_media_to_parent_comment.count;
         let ownerInfo = commentObject.owner;
         let mediaId = commentObject.id;
@@ -128,13 +129,20 @@ var loadMore = async function (page, maxComments,docHandle) {
         }
 
         console.log(`\n MediaShortCode => ${shortCode}  TotalComments => ${totalComments}  CommentsFetched => ${commentsAccumulator.length} \n`);
-        page.waitFor(1000 * 2);
-        page.close();
-        //csJson.account_comments.push(commentsAccumulator);
-        //write2File(csJson);
-        //browser.close();
-        return commentsAccumulator;
+
+
+    } else {
+        console.error("failed to fetch comments for " + shortCode);
     }
+
+    page.waitFor(1000 * 2);
+    page.close();
+
+    //csJson.account_comments.push(commentsAccumulator);
+    //write2File(csJson);
+    //browser.close();
+    return commentsAccumulator;
+}
 
     async function getCommentsByPost(browser, context, mediaShortCodes, maxComments,allCommentsForAllPosts) {
 
