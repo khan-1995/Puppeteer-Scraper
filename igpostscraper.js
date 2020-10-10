@@ -40,10 +40,8 @@ async function loadmore(page) {
 async function postScrapingEngine(account, browser, context) {
     var userAccount = new Object();
     var timelineMedia = [];
+    let page = await context.newPage();
     try {
-
-        const page = await context.newPage();
-
         await page.goto(`https://www.instagram.com/${account}`, { "waitUntil": "networkidle0", "timeout": 0 });
 
         var userInfo = await page.evaluate(() => {
@@ -52,7 +50,6 @@ async function postScrapingEngine(account, browser, context) {
                 if (window._sharedData.entry_data.ProfilePage.length > 0) {
                     return window._sharedData.entry_data.ProfilePage[0].graphql.user;
                 }
-
             }
             return undefined;
 
@@ -107,8 +104,8 @@ async function postScrapingEngine(account, browser, context) {
             page.setRequestInterception(true);
 
             page.on('request', req => {
-                var curUrl = req.url();
 
+                let curUrl = req.url();
                 if (curUrl.startsWith("https://www.instagram.com/graphql/query")) {
                     // curUrl = decodeURIComponent(curUrl);
                     // curUrl = curUrl.replace('"first":12', '"first":50');
@@ -164,6 +161,13 @@ async function postScrapingEngine(account, browser, context) {
                     console.log("err ::==> " + err);
                 });
 
+        }
+
+    } catch (error) {
+        console.error("error in scraping IgPosts " + error);
+    } finally {
+
+        if (timelineMedia !== undefined && timelineMedia.length > 0) {
             console.table(`Account ${account} PostsForWhichCommentsNeeded ${timelineMedia.length}`);
             csJson.account_infotimelines.push({ "userAccount": userAccount, "timelineMedia": timelineMedia });
             page.waitFor(500);
@@ -175,17 +179,13 @@ async function postScrapingEngine(account, browser, context) {
                 let totalComments = await getCommentsByPost(browser, context, shortCodes, 300, []);
                 csJson.account_comments.push(...totalComments);
             }
-
-            await page.close();
-        } else {
-            await page.close();
         }
 
-        return timelineMedia;
-    } catch (error) {
-        console.error("error in scraping IgPosts " + error);
-        return timelineMedia;
+        if (!page.isClosed()) {
+            await page.close();
+        }
     }
+    return timelineMedia;
 }
 
 async function processAllAccounts(fewAccounts, browser, context) { 
